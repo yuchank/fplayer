@@ -1,0 +1,95 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "runner": "terminal",
+  "type": "shell",
+  "echoCommand": true,
+  "presentation": {
+    "reveal": "always"
+  },
+  "tasks": [
+    // C++ compile
+    {
+      "label": "compile C++",
+      "command": "g++",
+      "args": [
+        "${file}",
+        "-g",
+        "-I${workspaceRoot}/include",
+        "-L${workspaceRoot}/lib",
+        "-lavformat",
+        "-lavutil",
+        "-o",
+        "${fileDirname}/${fileBasenameNoExtension}"
+      ],
+      "group": "build",
+
+      // 컴파일시 에러를 편집기에 반영
+      // 참고: https://code.visualstudio.com/docs/editor/tasks#_defining-a-problem-matcher
+      "problemMatcher": {
+        "fileLocation": [
+          "relative",
+          "${workspaceRoot}"
+        ],
+        "pattern": {
+          // The regular expression. 
+          // Example to match: helloWorld.c:5:3: warning: implicit declaration of function 'prinft'
+          "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    // compile
+    {
+      "label": "compile C",
+      "command": "gcc",
+      "args": [
+        "${file}",
+        "-g",
+        "-I",
+        "${workspaceRoot}",
+        "-I",
+        "${workspaceRoot}/include",
+        "-L",
+        "${workspaceRoot}/lib",
+        "-o",
+        "${fileDirname}/${fileBasenameNoExtension}"        
+      ],
+      "group": "build",
+
+      // 컴파일시 에러를 편집기에 반영
+      // 참고: https://code.visualstudio.com/docs/editor/tasks#_defining-a-problem-matcher 
+      "problemMatcher": {
+        "fileLocation": [
+          "relative",
+          "${workspaceRoot}"
+        ],
+        "pattern": {
+          // The regular expression. 
+          // Example to match: helloWorld.c:5:3: warning: implicit declaration of function ‘prinft’
+          "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    // execute
+    {
+      "label": "execute",
+      "command": "cmd",
+      "group": "test",
+      "args": [
+        "/C",
+        "${fileDirname}\\${fileBasenameNoExtension}"
+      ]
+    }
+  ]
+}
