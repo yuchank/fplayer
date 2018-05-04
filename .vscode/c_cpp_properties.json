@@ -3,21 +3,21 @@
     {
       "name": "MinGW",
       "intelliSenseMode": "clang-x64",
-      "compilerPath": "C:/Program Files/mingw-w64/x86_64-7.3.0-posix-seh-rt_v5-rev0/mingw64/bin/gcc.exe",
+      "compilerPath": "C:\\Program Files\\mingw-w64\\x86_64-7.3.0-posix-seh-rt_v5-rev0\\mingw64\\bin\\gcc.exe",
       "includePath": [
         "${workspaceFolder}",
-        "${workspaceFolder}/include",
-        "${workspaceFolder}/lib"
+        "${workspaceFolder}\\include",
+        "${workspaceFolder}\\lib"
       ],
       "defines": [
         "_DEBUG"
       ],
       "browse": {
         "path": [
-          "C:/Program Files/mingw-w64/x86_64-7.3.0-posix-seh-rt_v5-rev0/mingw64/x86_64-w64-mingw32/include",
+          "C:\\Program Files\\mingw-w64\\x86_64-7.3.0-posix-seh-rt_v5-rev0\\mingw64\\x86_64-w64-mingw32\\include",
           "${workspaceFolder}",
-          "${workspaceFolder}/include",
-          "${workspaceFolder}/lib"
+          "${workspaceFolder}\\include",
+          "${workspaceFolder}\\lib"
         ],
         "limitSymbolsToIncludedHeaders": true,
         "databaseFilename": ""

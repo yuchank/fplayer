@@ -16,12 +16,12 @@
       "args": [
         "${file}",
         "-g",
-        "-I${workspaceRoot}/include",
-        "-L${workspaceRoot}/lib",
+        "-I${workspaceRoot}\\include",
+        "-L${workspaceRoot}\\lib",
         "-lavformat",
         "-lavutil",
         "-o",
-        "${fileDirname}/${fileBasenameNoExtension}"
+        "${workspaceRoot}\\dist\\${fileBasenameNoExtension}"
       ],
       "group": "build",
 
@@ -54,11 +54,11 @@
         "-I",
         "${workspaceRoot}",
         "-I",
-        "${workspaceRoot}/include",
+        "${workspaceRoot}\\include",
         "-L",
-        "${workspaceRoot}/lib",
+        "${workspaceRoot}\\lib",
         "-o",
-        "${fileDirname}/${fileBasenameNoExtension}"        
+        "${workspaceRoot}\\dist\\${fileBasenameNoExtension}"        
       ],
       "group": "build",
 
@@ -88,8 +88,17 @@
       "group": "test",
       "args": [
         "/C",
-        "${fileDirname}\\${fileBasenameNoExtension}"
+        "${workspaceRoot}\\dist\\${fileBasenameNoExtension}"
       ]
     }
   ]
 }
+
+// macro
+// ${env.<VARIABLE>}	${env.PATH}, ${env.COMSPEC}
+// ${workspaceRoot}	C:\sources\hello
+// ${file}	        C:\sources\hello\src\hello.js
+// ${relativeFile}	src\hello.js
+// ${fileBasename}	hello
+// ${fileDirname}	  C:\sources\hello\src
+// ${fileExtname}	  .js
