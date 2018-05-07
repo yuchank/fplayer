@@ -145,6 +145,15 @@ int main(void)
     exit(-1);
   }
 
+#ifdef FFMPEG_4
+    // AVCodecParserContext *vParser;
+    // vParser = av_parser_init(pViedoCodec->id);
+    // if (vParser == NULL) {
+    //   fprintf(stderr, "video parser not found\n");
+    //   exit(-1);
+    // }
+#endif
+
   // find audio decoder
 #ifdef FFMPEG_4
   AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codecpar->codec_id);
@@ -155,6 +164,15 @@ int main(void)
     av_log(NULL, AV_LOG_ERROR, "No Audio decoder was found");
     exit(-1);
   }
+
+#ifdef FFMPEG_4
+    // AVCodecParserContext *aParser;
+    // aParser = av_parser_init(pAudioCodec->id);
+    // if (aParser == NULL) {
+    //   fprintf(stderr, "audio parser not found\n");
+    //   exit(-1);
+    // }
+#endif
 
 #ifdef FFMPEG_4
   AVCodecContext *pVCtx = avcodec_alloc_context3(pViedoCodec);
@@ -182,17 +200,19 @@ int main(void)
   }
 
   AVPacket *pkt = av_packet_alloc();
-  AVFrame *pVFrame = NULL;
-  AVFrame *pAFrame = NULL;
+  AVFrame *pVFrame = av_frame_alloc();
+  AVFrame *pAFrame = av_frame_alloc();
+
+  if (!pkt || !pVFrame || !pAFrame) {
+    fprintf(stderr, "Could not allocate\n");
+    exit(-1);
+  }
 
 #ifndef FFMPEG_4
   int bGotPicture = 0;  // flag for video decoding
   int bGotSound = 0;    // flag for audio decoding
 #endif
   int bPrint = 0; 
-
-  pVFrame = av_frame_alloc();
-  pAFrame = av_frame_alloc();
 
   while (av_read_frame(pFmtCtx, pkt) >= 0) {
     // decoding
