@@ -126,7 +126,7 @@ int main(void)
     exit(-1);
   }
 
-  // find video decoder
+  // find audio decoder
   // AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codec->codec_id);
   AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codecpar->codec_id);
   if (pAudioCodec == NULL) {
