@@ -210,6 +210,7 @@ int main(void)
         }
         av_log(NULL, AV_LOG_INFO, "video frame: %d\n", pVCtx->frame_number);
       }
+    }
 #else
       if (avcodec_decode_video2(pVCtx, pVFrame, &bGotPicture, pkt) >= 0) {
         if (bGotPicture) {
@@ -224,8 +225,8 @@ int main(void)
       else {
         av_log(NULL, AV_LOG_ERROR, "video decoding error\n");
       }
-#endif          
     }
+#endif          
     else if (pkt->stream_index == nASI) {
 #ifdef FFMPEG_4
       int ret = avcodec_send_packet(pACtx, pkt);
@@ -239,6 +240,8 @@ int main(void)
           break;
         }
         av_log(NULL, AV_LOG_INFO, "audio frame: %d\n", pACtx->frame_number);
+      }
+    }
 #else
       if (avcodec_decode_audio4(pACtx, pAFrame, &bGotSound, pkt) >= 0) {
         if (bGotSound) {
@@ -249,9 +252,8 @@ int main(void)
       else {
         av_log(NULL, AV_LOG_ERROR, "audio decoding error\n");
       }
-#endif   
     }
-    
+#endif   
     // free the packet that was allocated by av_read_frame
 #ifdef FFMPEG_4
     av_packet_unref(pkt);
