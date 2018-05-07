@@ -15,6 +15,8 @@ extern "C" {
 const char *AVMediaType2Str(AVMediaType type);
 const char *AVCodecID2Str(AVCodecID type);
 
+int decode(AVCodecContext *avctx, AVFrame *frame, int *got_frame, AVPacket *pkt);
+
 using namespace std;
 
 int main(void)
@@ -208,16 +210,17 @@ int main(void)
     exit(-1);
   }
 
-#ifndef FFMPEG_4
+// #ifndef FFMPEG_4
   int bGotPicture = 0;  // flag for video decoding
   int bGotSound = 0;    // flag for audio decoding
-#endif
+// #endif
   int bPrint = 0; 
 
   while (av_read_frame(pFmtCtx, pkt) >= 0) {
     // decoding
     if (pkt->stream_index == nVSI) {
 #ifdef FFMPEG_4
+#if 0
       int ret = avcodec_send_packet(pVCtx, pkt);
       if (ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
         av_log(NULL, AV_LOG_ERROR, "avcodec_send_packet: %d\n", ret);
@@ -230,6 +233,21 @@ int main(void)
         }
         av_log(NULL, AV_LOG_INFO, "video frame: %d\n", pVCtx->frame_number);
       }
+#else
+      if (decode(pVCtx, pVFrame, &bGotPicture, pkt) >= 0) {
+        if (bGotPicture) {
+          // ready to render image
+          av_log(NULL, AV_LOG_INFO, "Got Picture\n");
+          // if (!bPrint) {
+          //   write_ascii_frame("output.txt", pVFrame);
+          //   bPrint = 1;
+          // }
+        }
+      }
+      else {
+        av_log(NULL, AV_LOG_ERROR, "video decoding error\n");
+      }   
+#endif      
     }
 #else
       if (avcodec_decode_video2(pVCtx, pVFrame, &bGotPicture, pkt) >= 0) {
@@ -249,6 +267,7 @@ int main(void)
 #endif          
     else if (pkt->stream_index == nASI) {
 #ifdef FFMPEG_4
+#if 0
       int ret = avcodec_send_packet(pACtx, pkt);
       if (ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
         av_log(NULL, AV_LOG_ERROR, "avcodec_send_packet: %d\n", ret);
@@ -261,6 +280,17 @@ int main(void)
         }
         av_log(NULL, AV_LOG_INFO, "audio frame: %d\n", pACtx->frame_number);
       }
+#else
+      if (decode(pACtx, pAFrame, &bGotSound, pkt) >= 0) {
+        if (bGotSound) {
+          // ready to render sound
+          av_log(NULL, AV_LOG_INFO, "Got Sound\n");
+        }
+      }
+      else {
+        av_log(NULL, AV_LOG_ERROR, "audio decoding error\n");
+      }  
+#endif      
     }
 #else
       if (avcodec_decode_audio4(pACtx, pAFrame, &bGotSound, pkt) >= 0) {
@@ -335,4 +365,28 @@ void write_ascii_frame(const char *szFileName, const AVFrame *frame)
 		fflush(fp);
 		fclose(fp);
 	}
+}
+
+int decode(AVCodecContext *avctx, AVFrame *frame, int *got_frame, AVPacket *pkt)
+{
+  int ret;
+
+  *got_frame = 0;
+
+  if (pkt) {
+    ret = avcodec_send_packet(avctx, pkt);
+    // In particular, we don't expect AVERROR(EAGAIN), because we read all
+    // decoded frames with avcodec_receive_frame() until done.
+    if (ret < 0) {
+      return ret == AVERROR_EOF ? 0 : ret;
+    }
+  }
+
+  ret = avcodec_receive_frame(avctx, frame);
+  if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
+    return ret;
+  if (ret >= 0)
+    *got_frame = 1;
+
+  return 0;
 }
