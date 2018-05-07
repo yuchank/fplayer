@@ -17,14 +17,15 @@ using namespace std;
 
 int main(void)
 {
-  const char *szFilePath = "rtsp://192.168.0.9/test.mp4";
+  // const char *szFilePath = "rtsp://192.168.0.9/test.mp4";
+  const char *szFilePath = "sample.mp4";
   int ret;
 
   AVFormatContext *pFmtCtx = NULL;
 
   // initialize libavformat and register all the muxers, demuxers and protocols.
-  // av_register_all();     // deprecated
-  avdevice_register_all();
+  av_register_all();     // deprecated
+  // avdevice_register_all();
   // do global initialization of network components.
   avformat_network_init();
 
@@ -62,21 +63,21 @@ int main(void)
   // stream information
   for (int i = 0; i < pFmtCtx->nb_streams; i++) {
     AVStream *pStream = pFmtCtx->streams[i];
-    // const char *szType = AVMediaType2Str(pStream->codec->codec_type);
-    // const char *szCodecName = AVCodecID2Str(pStream->codec->codec_id);
-    const char *szType = AVMediaType2Str(pStream->codecpar->codec_type);
-    const char *szCodecName = AVCodecID2Str(pStream->codecpar->codec_id);
+    const char *szType = AVMediaType2Str(pStream->codec->codec_type);
+    const char *szCodecName = AVCodecID2Str(pStream->codec->codec_id);
+    // const char *szType = AVMediaType2Str(pStream->codecpar->codec_type);
+    // const char *szCodecName = AVCodecID2Str(pStream->codecpar->codec_id);
     
     av_log(NULL, AV_LOG_INFO, "    > Stream[%d]: %s: %s ", i, szType, szCodecName);
-    // if (pStream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
     if (pStream->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
-			// av_log(NULL, AV_LOG_INFO, "%dx%d (%.2f fps)", pStream->codec->width, pStream->codec->height, av_q2d(pStream->r_frame_rate));
-			av_log(NULL, AV_LOG_INFO, "%dx%d (%.2f fps)", pStream->codecpar->width, pStream->codecpar->height, av_q2d(pStream->r_frame_rate));
+    // if (pStream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+			av_log(NULL, AV_LOG_INFO, "%dx%d (%.2f fps)", pStream->codec->width, pStream->codec->height, av_q2d(pStream->r_frame_rate));
+			// av_log(NULL, AV_LOG_INFO, "%dx%d (%.2f fps)", pStream->codecpar->width, pStream->codecpar->height, av_q2d(pStream->r_frame_rate));
 		}
-		// else if (pStream->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
-		else if (pStream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-			// av_log(NULL, AV_LOG_INFO, "%d Hz", pStream->codec->sample_rate);
-			av_log(NULL, AV_LOG_INFO, "%d Hz", pStream->codecpar->sample_rate);
+		else if (pStream->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+		// else if (pStream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+			av_log(NULL, AV_LOG_INFO, "%d Hz", pStream->codec->sample_rate);
+			// av_log(NULL, AV_LOG_INFO, "%d Hz", pStream->codecpar->sample_rate);
 		}
 		av_log(NULL, AV_LOG_INFO, "\n");
   }
@@ -87,12 +88,12 @@ int main(void)
 
   // method 1
   for (int i = 0; i < pFmtCtx->nb_streams; i++) {
-    // if (nVSI < 0 && pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
-    if (nVSI < 0 && pFmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+    if (nVSI < 0 && pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+    // if (nVSI < 0 && pFmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
       nVSI = i;
     }
-    // else if (nASI < 0 && pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
-    else if (nASI < 0 && pFmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+    else if (nASI < 0 && pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+    // else if (nASI < 0 && pFmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
       nASI = i;
     }
   }
@@ -106,39 +107,39 @@ int main(void)
     exit(-1);
   }
 
-  // AVCodecContext *pVCtx = pFmtCtx->streams[nVSI]->codec;
-  // AVCodecContext *pACtx = pFmtCtx->streams[nASI]->codec;
+  AVCodecContext *pVCtx = pFmtCtx->streams[nVSI]->codec;
+  AVCodecContext *pACtx = pFmtCtx->streams[nASI]->codec;
 
   // find video decoder
-  // AVCodec *pViedoCodec = avcodec_find_decoder(pFmtCtx->streams[nVSI]->codec->codec_id);
-  AVCodec *pViedoCodec = avcodec_find_decoder(pFmtCtx->streams[nVSI]->codecpar->codec_id);
+  AVCodec *pViedoCodec = avcodec_find_decoder(pFmtCtx->streams[nVSI]->codec->codec_id);
+  // AVCodec *pViedoCodec = avcodec_find_decoder(pFmtCtx->streams[nVSI]->codecpar->codec_id);
   if (pViedoCodec == NULL) {
     av_log(NULL, AV_LOG_ERROR, "No Video decoder was found");
     exit(-1);
   }
 
-  AVCodecContext *pVCtx = avcodec_alloc_context3(pViedoCodec);
+  // AVCodecContext *pVCtx = avcodec_alloc_context3(pViedoCodec);
 
   // initialize codec context as decoder
-  // if (avcodec_open2(pFmtCtx->streams[nVSI]->codec, pViedoCodec, NULL) < 0) {
-  if (avcodec_open2(pVCtx, pViedoCodec, NULL) < 0) {
+  if (avcodec_open2(pFmtCtx->streams[nVSI]->codec, pViedoCodec, NULL) < 0) {
+  // if (avcodec_open2(pVCtx, pViedoCodec, NULL) < 0) {
     av_log(NULL, AV_LOG_ERROR, "Failed to initialize video decoder");
     exit(-1);
   }
 
   // find audio decoder
-  // AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codec->codec_id);
-  AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codecpar->codec_id);
+  AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codec->codec_id);
+  // AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codecpar->codec_id);
   if (pAudioCodec == NULL) {
     av_log(NULL, AV_LOG_ERROR, "No Audio decoder was found");
     exit(-1);
   }
   
-  AVCodecContext *pACtx = avcodec_alloc_context3(pAudioCodec);
+  // AVCodecContext *pACtx = avcodec_alloc_context3(pAudioCodec);
 
   // initialize codec context as decoder
-  // if (avcodec_open2(pFmtCtx->streams[nASI]->codec, pAudioCodec, NULL) < 0) {
-  if (avcodec_open2(pACtx, pAudioCodec, NULL) < 0) {
+  if (avcodec_open2(pFmtCtx->streams[nASI]->codec, pAudioCodec, NULL) < 0) {
+  // if (avcodec_open2(pACtx, pAudioCodec, NULL) < 0) {
     av_log(NULL, AV_LOG_ERROR, "Failed to initialize audio decoder");
     exit(-1);
   }
@@ -156,8 +157,8 @@ int main(void)
   while (av_read_frame(pFmtCtx, &pkt) >= 0) {
     // decoding
     if (pkt.stream_index == nVSI) {
-      // if (avcodec_decode_video2(pVCtx, pVFrame, &bGotPicture, &pkt) >= 0) {
-      if (avcodec_receive_frame(pVCtx, pVFrame) >= 0) {
+      if (avcodec_decode_video2(pVCtx, pVFrame, &bGotPicture, &pkt) >= 0) {
+      // if (avcodec_receive_frame(pVCtx, pVFrame) >= 0) {
         if (bGotPicture) {
           // ready to render image
           av_log(NULL, AV_LOG_INFO, "Got Picture\n");
@@ -172,11 +173,11 @@ int main(void)
       }
     }
     else if (pkt.stream_index == nASI) {
-      // if (avcodec_decode_audio4(pACtx, pAFrame, &bGotSound, &pkt) >= 0) {
-      if (avcodec_receive_frame(pACtx, pAFrame) >= 0) {
+      if (avcodec_decode_audio4(pACtx, pAFrame, &bGotSound, &pkt) >= 0) {
+      // if (avcodec_receive_frame(pACtx, pAFrame) >= 0) {
         if (bGotSound) {
           // ready to render sound
-          av_log(NULL, AV_LOG_INFO, "Got Picture\n");
+          av_log(NULL, AV_LOG_INFO, "Got Sound\n");
         }
       }
       else {
