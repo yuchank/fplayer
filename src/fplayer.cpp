@@ -1,3 +1,5 @@
+#define FFMPEG_4
+
 extern "C" {
   #include <libavformat/avformat.h>
   #include <libavdevice/avdevice.h>
@@ -13,18 +15,24 @@ extern "C" {
 const char *AVMediaType2Str(AVMediaType type);
 const char *AVCodecID2Str(AVCodecID type);
 
+int decode(AVCodecContext *avctx, AVFrame *frame, int *got_frame, AVPacket *pkt);
+
 using namespace std;
 
 int main(void)
 {
-  const char *szFilePath = "rtsp://192.168.0.9/test.mp4";
+  // const char *szFilePath = "rtsp://192.168.0.9/test.mp4";
+  const char *szFilePath = "sample.mp4";
   int ret;
 
   AVFormatContext *pFmtCtx = NULL;
 
   // initialize libavformat and register all the muxers, demuxers and protocols.
-  // av_register_all();     // deprecated
+#ifdef FFMPEG_4
   avdevice_register_all();
+#else
+  av_register_all();     // deprecated  
+#endif  
   // do global initialization of network components.
   avformat_network_init();
 
@@ -62,21 +70,32 @@ int main(void)
   // stream information
   for (int i = 0; i < pFmtCtx->nb_streams; i++) {
     AVStream *pStream = pFmtCtx->streams[i];
-    // const char *szType = AVMediaType2Str(pStream->codec->codec_type);
-    // const char *szCodecName = AVCodecID2Str(pStream->codec->codec_id);
+
+#ifdef FFMPEG_4
     const char *szType = AVMediaType2Str(pStream->codecpar->codec_type);
     const char *szCodecName = AVCodecID2Str(pStream->codecpar->codec_id);
-    
+#else
+    const char *szType = AVMediaType2Str(pStream->codec->codec_type);
+    const char *szCodecName = AVCodecID2Str(pStream->codec->codec_id);
+#endif    
+
     av_log(NULL, AV_LOG_INFO, "    > Stream[%d]: %s: %s ", i, szType, szCodecName);
-    // if (pStream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+
+#ifdef FFMPEG_4
+    if (pStream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+      av_log(NULL, AV_LOG_INFO, "%dx%d (%.2f fps)", pStream->codecpar->width, pStream->codecpar->height, av_q2d(pStream->r_frame_rate));
+#else
     if (pStream->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
-			// av_log(NULL, AV_LOG_INFO, "%dx%d (%.2f fps)", pStream->codec->width, pStream->codec->height, av_q2d(pStream->r_frame_rate));
-			av_log(NULL, AV_LOG_INFO, "%dx%d (%.2f fps)", pStream->codecpar->width, pStream->codecpar->height, av_q2d(pStream->r_frame_rate));
+			av_log(NULL, AV_LOG_INFO, "%dx%d (%.2f fps)", pStream->codec->width, pStream->codec->height, av_q2d(pStream->r_frame_rate));
+#endif
 		}
-		// else if (pStream->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
-		else if (pStream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-			// av_log(NULL, AV_LOG_INFO, "%d Hz", pStream->codec->sample_rate);
+#ifdef FFMPEG_4
+    else if (pStream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
 			av_log(NULL, AV_LOG_INFO, "%d Hz", pStream->codecpar->sample_rate);
+#else
+		else if (pStream->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+			av_log(NULL, AV_LOG_INFO, "%d Hz", pStream->codec->sample_rate);
+#endif
 		}
 		av_log(NULL, AV_LOG_INFO, "\n");
   }
@@ -87,12 +106,18 @@ int main(void)
 
   // method 1
   for (int i = 0; i < pFmtCtx->nb_streams; i++) {
-    // if (nVSI < 0 && pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+#ifdef FFMPEG_4
     if (nVSI < 0 && pFmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+#else
+    if (nVSI < 0 && pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+#endif    
       nVSI = i;
     }
-    // else if (nASI < 0 && pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+#ifdef FFMPEG_4
     else if (nASI < 0 && pFmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+#else
+    else if (nASI < 0 && pFmtCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+#endif    
       nASI = i;
     }
   }
@@ -106,58 +131,126 @@ int main(void)
     exit(-1);
   }
 
-  // AVCodecContext *pVCtx = pFmtCtx->streams[nVSI]->codec;
-  // AVCodecContext *pACtx = pFmtCtx->streams[nASI]->codec;
+#ifndef FFMPEG_4
+  AVCodecContext *pVCtx = pFmtCtx->streams[nVSI]->codec;
+  AVCodecContext *pACtx = pFmtCtx->streams[nASI]->codec;
+#endif
 
   // find video decoder
-  // AVCodec *pViedoCodec = avcodec_find_decoder(pFmtCtx->streams[nVSI]->codec->codec_id);
+#ifdef FFMPEG_4
   AVCodec *pViedoCodec = avcodec_find_decoder(pFmtCtx->streams[nVSI]->codecpar->codec_id);
+#else
+  AVCodec *pViedoCodec = avcodec_find_decoder(pFmtCtx->streams[nVSI]->codec->codec_id);
+#endif  
   if (pViedoCodec == NULL) {
     av_log(NULL, AV_LOG_ERROR, "No Video decoder was found");
     exit(-1);
   }
 
-  AVCodecContext *pVCtx = avcodec_alloc_context3(pViedoCodec);
-
-  // initialize codec context as decoder
-  // if (avcodec_open2(pFmtCtx->streams[nVSI]->codec, pViedoCodec, NULL) < 0) {
-  if (avcodec_open2(pVCtx, pViedoCodec, NULL) < 0) {
-    av_log(NULL, AV_LOG_ERROR, "Failed to initialize video decoder");
-    exit(-1);
-  }
+#ifdef FFMPEG_4
+    // AVCodecParserContext *vParser;
+    // vParser = av_parser_init(pViedoCodec->id);
+    // if (vParser == NULL) {
+    //   fprintf(stderr, "video parser not found\n");
+    //   exit(-1);
+    // }
+#endif
 
   // find audio decoder
-  // AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codec->codec_id);
+#ifdef FFMPEG_4
   AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codecpar->codec_id);
+#else
+  AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codec->codec_id);
+#endif  
   if (pAudioCodec == NULL) {
     av_log(NULL, AV_LOG_ERROR, "No Audio decoder was found");
     exit(-1);
   }
-  
+
+#ifdef FFMPEG_4
+    // AVCodecParserContext *aParser;
+    // aParser = av_parser_init(pAudioCodec->id);
+    // if (aParser == NULL) {
+    //   fprintf(stderr, "audio parser not found\n");
+    //   exit(-1);
+    // }
+#endif
+
+#ifdef FFMPEG_4
+  AVCodecContext *pVCtx = avcodec_alloc_context3(pViedoCodec);
   AVCodecContext *pACtx = avcodec_alloc_context3(pAudioCodec);
+#endif  
 
   // initialize codec context as decoder
-  // if (avcodec_open2(pFmtCtx->streams[nASI]->codec, pAudioCodec, NULL) < 0) {
+#ifdef FFMPEG_4
+  if (avcodec_open2(pVCtx, pViedoCodec, NULL) < 0) {
+#else
+  if (avcodec_open2(pFmtCtx->streams[nVSI]->codec, pViedoCodec, NULL) < 0) {
+#endif  
+    av_log(NULL, AV_LOG_ERROR, "Failed to initialize video decoder");
+    exit(-1);
+  }
+
+  // initialize codec context as decoder
+#ifdef FFMPEG_4
   if (avcodec_open2(pACtx, pAudioCodec, NULL) < 0) {
+#else
+  if (avcodec_open2(pFmtCtx->streams[nASI]->codec, pAudioCodec, NULL) < 0) {
+#endif
     av_log(NULL, AV_LOG_ERROR, "Failed to initialize audio decoder");
     exit(-1);
   }
 
-  AVPacket pkt;
-  AVFrame *pVFrame, *pAFrame;
+  AVPacket *pkt = av_packet_alloc();
+  AVFrame *pVFrame = av_frame_alloc();
+  AVFrame *pAFrame = av_frame_alloc();
+
+  if (!pkt || !pVFrame || !pAFrame) {
+    fprintf(stderr, "Could not allocate\n");
+    exit(-1);
+  }
+
+// #ifndef FFMPEG_4
   int bGotPicture = 0;  // flag for video decoding
   int bGotSound = 0;    // flag for audio decoding
-
+// #endif
   int bPrint = 0; 
 
-  pVFrame = av_frame_alloc();
-  pAFrame = av_frame_alloc();
-
-  while (av_read_frame(pFmtCtx, &pkt) >= 0) {
+  while (av_read_frame(pFmtCtx, pkt) >= 0) {
     // decoding
-    if (pkt.stream_index == nVSI) {
-      // if (avcodec_decode_video2(pVCtx, pVFrame, &bGotPicture, &pkt) >= 0) {
-      if (avcodec_receive_frame(pVCtx, pVFrame) >= 0) {
+    if (pkt->stream_index == nVSI) {
+#ifdef FFMPEG_4
+#if 0
+      int ret = avcodec_send_packet(pVCtx, pkt);
+      if (ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+        av_log(NULL, AV_LOG_ERROR, "avcodec_send_packet: %d\n", ret);
+        break;
+      }
+      while (ret >= 0) {
+        ret = avcodec_receive_frame(pVCtx, pVFrame);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+          break;
+        }
+        av_log(NULL, AV_LOG_INFO, "video frame: %d\n", pVCtx->frame_number);
+      }
+#else
+      if (decode(pVCtx, pVFrame, &bGotPicture, pkt) >= 0) {
+        if (bGotPicture) {
+          // ready to render image
+          av_log(NULL, AV_LOG_INFO, "Got Picture\n");
+          // if (!bPrint) {
+          //   write_ascii_frame("output.txt", pVFrame);
+          //   bPrint = 1;
+          // }
+        }
+      }
+      else {
+        av_log(NULL, AV_LOG_ERROR, "video decoding error\n");
+      }   
+#endif      
+    }
+#else
+      if (avcodec_decode_video2(pVCtx, pVFrame, &bGotPicture, pkt) >= 0) {
         if (bGotPicture) {
           // ready to render image
           av_log(NULL, AV_LOG_INFO, "Got Picture\n");
@@ -171,21 +264,52 @@ int main(void)
         av_log(NULL, AV_LOG_ERROR, "video decoding error\n");
       }
     }
-    else if (pkt.stream_index == nASI) {
-      // if (avcodec_decode_audio4(pACtx, pAFrame, &bGotSound, &pkt) >= 0) {
-      if (avcodec_receive_frame(pACtx, pAFrame) >= 0) {
+#endif          
+    else if (pkt->stream_index == nASI) {
+#ifdef FFMPEG_4
+#if 0
+      int ret = avcodec_send_packet(pACtx, pkt);
+      if (ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+        av_log(NULL, AV_LOG_ERROR, "avcodec_send_packet: %d\n", ret);
+        break;
+      }
+      while (ret >= 0) {
+        ret = avcodec_receive_frame(pACtx, pAFrame);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+          break;
+        }
+        av_log(NULL, AV_LOG_INFO, "audio frame: %d\n", pACtx->frame_number);
+      }
+#else
+      if (decode(pACtx, pAFrame, &bGotSound, pkt) >= 0) {
         if (bGotSound) {
           // ready to render sound
-          av_log(NULL, AV_LOG_INFO, "Got Picture\n");
+          av_log(NULL, AV_LOG_INFO, "Got Sound\n");
+        }
+      }
+      else {
+        av_log(NULL, AV_LOG_ERROR, "audio decoding error\n");
+      }  
+#endif      
+    }
+#else
+      if (avcodec_decode_audio4(pACtx, pAFrame, &bGotSound, pkt) >= 0) {
+        if (bGotSound) {
+          // ready to render sound
+          av_log(NULL, AV_LOG_INFO, "Got Sound\n");
         }
       }
       else {
         av_log(NULL, AV_LOG_ERROR, "audio decoding error\n");
       }
     }
-    
+#endif   
     // free the packet that was allocated by av_read_frame
-    av_packet_unref(&pkt);
+#ifdef FFMPEG_4
+    av_packet_unref(pkt);
+#else
+    av_free_packet(pkt);
+#endif
   }
 
   av_free(pVFrame);
@@ -241,4 +365,28 @@ void write_ascii_frame(const char *szFileName, const AVFrame *frame)
 		fflush(fp);
 		fclose(fp);
 	}
+}
+
+int decode(AVCodecContext *avctx, AVFrame *frame, int *got_frame, AVPacket *pkt)
+{
+  int ret;
+
+  *got_frame = 0;
+
+  if (pkt) {
+    ret = avcodec_send_packet(avctx, pkt);
+    // In particular, we don't expect AVERROR(EAGAIN), because we read all
+    // decoded frames with avcodec_receive_frame() until done.
+    if (ret < 0) {
+      return ret == AVERROR_EOF ? 0 : ret;
+    }
+  }
+
+  ret = avcodec_receive_frame(avctx, frame);
+  if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
+    return ret;
+  if (ret >= 0)
+    *got_frame = 1;
+
+  return 0;
 }
