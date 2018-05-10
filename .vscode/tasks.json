@@ -23,6 +23,9 @@
         "-lavcodec",
         "-lavdevice",
         "-lswscale",
+        "-lmingw32",
+        "-lSDL2main",
+        "-lSDL2",
         "-o",
         "${workspaceRoot}\\dist\\${fileBasenameNoExtension}"
       ],
