@@ -68,6 +68,7 @@ int main(void)
         }
       }
     }
+    av_packet_unref(pkt);
   }
   
   av_frame_free(&pVFrame);

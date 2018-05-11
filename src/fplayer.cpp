@@ -312,9 +312,17 @@ int main(void)
 #endif
   }
 
-  av_free(pVFrame);
-  av_free(pAFrame);
+  av_frame_free(&pVFrame);
+  av_frame_free(&pAFrame);
 
+  av_packet_free(&pkt);
+
+  avcodec_close(pVCtx);
+  avcodec_close(pACtx);
+
+  avcodec_free_context(&pVCtx);
+  avcodec_free_context(&pACtx);
+  
   // close an opened input AVFormatContext.
   avformat_close_input(&pFmtCtx);
   // undo the initialization done by avformat_network_init.

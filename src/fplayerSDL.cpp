@@ -141,6 +141,7 @@ int main(int argc, char *argv[])
         }
       }
     }
+    av_packet_unref(pkt);
   }
   
   SDL_DestroyRenderer(renderer);
