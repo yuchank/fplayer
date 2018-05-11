@@ -14,7 +14,6 @@ int main(int argc, char *argv[])
 {
   // const char *szFilePath = "rtsp://192.168.0.9/test.mp4";
   const char *szFilePath = "sample.mp4";
-  int ret;
 
   AVFormatContext *pFmtCtx = NULL;
 
