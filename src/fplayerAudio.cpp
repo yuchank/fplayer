@@ -3,6 +3,8 @@ extern "C" {
   #include <libavcodec/avcodec.h>
   #include <libswscale/swscale.h>
   #include <libavutil/imgutils.h>
+  #include <libswresample/swresample.h>
+  #include <libavdevice/avdevice.h>
 }
 
 #include <SDL2/SDL.h>
@@ -13,7 +15,7 @@ extern "C" {
 #define SDL_AUDIO_BUFFER_SIZE 1024
 #define MAX_AUDIO_FRAME_SIZE  19200
 
-typedef struct PacketQueue {
+typedef struct _PacketQueue {
   AVPacketList *first_pkt, *last_pkt;
   int nb_packets;
   int size;         // packet->size
@@ -21,7 +23,11 @@ typedef struct PacketQueue {
   SDL_cond *cond;
 } PacketQueue;
 
+int quit = 0;
+
 PacketQueue audioq;
+
+SwrContext *swrCtx;
 
 void packet_queue_init(PacketQueue *q) {
   memset(q, 0, sizeof(PacketQueue));
@@ -31,9 +37,10 @@ void packet_queue_init(PacketQueue *q) {
 
 int packet_queue_put(PacketQueue *q, AVPacket *pkt) {
   AVPacketList *pktl;
-  av_packet_ref(pkt, pkt);
+  AVPacket p;
+  av_packet_ref(&p, pkt);
   pktl = (AVPacketList *)av_malloc(sizeof(AVPacketList));
-  pktl->pkt = *pkt;
+  pktl->pkt = p;
   pktl->next = NULL;
   SDL_LockMutex(q->mutex);
   if (!q->last_pkt) {
@@ -49,8 +56,6 @@ int packet_queue_put(PacketQueue *q, AVPacket *pkt) {
 
   return 0;
 }
-
-int quit = 0;
 
 int packet_queue_get(PacketQueue *q, AVPacket *pkt, int block) {
   AVPacketList *pktl;
@@ -90,12 +95,16 @@ int packet_queue_get(PacketQueue *q, AVPacket *pkt, int block) {
 }
 
 int audio_decode_frame(AVCodecContext *pACtx, uint8_t *audio_buf, int buf_size) {
-  static AVPacket pkt;
+  static AVPacket pkt = { 0 };
   static uint8_t *audio_pkt_data = NULL;
   static int audio_pkt_size = 0;
   static AVFrame frame;
 
   int len1, data_size = 0;
+
+  static uint8_t converted_data[(192000 * 3) / 2];
+	static uint8_t * converted = &converted_data[0];;
+  int len2;
 
   while (1) {
     while (audio_pkt_size > 0) {
@@ -112,7 +121,11 @@ int audio_decode_frame(AVCodecContext *pACtx, uint8_t *audio_buf, int buf_size) 
       if (got_frame) {
 	      data_size = av_samples_get_buffer_size(NULL, pACtx->channels, frame.nb_samples, pACtx->sample_fmt, 1);
 	      assert(data_size <= buf_size);
-	      memcpy(audio_buf, frame.data[0], data_size);
+        int outSize = av_samples_get_buffer_size(NULL, pACtx->channels, frame.nb_samples, AV_SAMPLE_FMT_FLT, 1);
+				len2 = swr_convert(swrCtx, &converted, frame.nb_samples, (const uint8_t**)&frame.data[0], frame.nb_samples);
+				memcpy(audio_buf, converted_data, outSize);
+				data_size = outSize;
+	      // memcpy(audio_buf, frame.data[0], data_size);
       }
       if (data_size <= 0) {
 	      /* No data yet, get more frames */
@@ -204,6 +217,21 @@ int main(int argc, char *argv[])
   avcodec_parameters_to_context(pVCtx, pFmtCtx->streams[nVSI]->codecpar);
   avcodec_parameters_to_context(pACtx, pFmtCtx->streams[nASI]->codecpar);
 
+  // initialize codec context as decoder
+  avcodec_open2(pVCtx, pVideoCodec, NULL);
+  avcodec_open2(pACtx, pAudioCodec, NULL);
+
+  swrCtx = swr_alloc();
+	av_opt_set_channel_layout(swrCtx, "in_channel_layout", pACtx->channel_layout, 0);
+	av_opt_set_channel_layout(swrCtx, "out_channel_layout", pACtx->channel_layout, 0);
+	av_opt_set_int(swrCtx, "in_sample_rate", pACtx->sample_rate, 0);
+	av_opt_set_int(swrCtx, "out_sample_rate", pACtx->sample_rate, 0);
+	av_opt_set_sample_fmt(swrCtx, "in_sample_fmt", pACtx->sample_fmt, 0);
+	av_opt_set_sample_fmt(swrCtx, "out_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
+	swr_init(swrCtx);
+
+  packet_queue_init(&audioq);
+
   SDL_AudioSpec wanted_spec, spec;
   wanted_spec.freq = pACtx->sample_rate;
   wanted_spec.format = AUDIO_S16SYS;    // Signed 16bit endian:SYS
@@ -215,13 +243,6 @@ int main(int argc, char *argv[])
 
   // open the audio device
   SDL_OpenAudio(&wanted_spec, &spec);
-
-  // initialize codec context as decoder
-  avcodec_open2(pVCtx, pVideoCodec, NULL);
-  avcodec_open2(pACtx, pAudioCodec, NULL);
-
-  packet_queue_init(&audioq);
-
   // starts the audio device. it plays silence if it doesn't get data.
   SDL_PauseAudio(0);
   
