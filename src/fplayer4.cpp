@@ -3,8 +3,6 @@ extern "C" {
   #include <libavcodec/avcodec.h>
 }
 
-int decode(AVCodecContext *avctx, AVFrame *frame, int *got_frame, AVPacket *pkt);
-
 int main(void)
 {
   // const char *szFilePath = "rtsp://192.168.0.9/test.mp4";
@@ -53,18 +51,16 @@ int main(void)
   int bGotSound = 0;    // flag for audio decoding
 
   while (av_read_frame(pFmtCtx, pkt) >= 0) {
-    if (pkt) {
-      if (pkt->stream_index == nVSI) {
-        if (avcodec_send_packet(pVCtx, pkt) >= 0) {
-          if (avcodec_receive_frame(pVCtx, pVFrame) >= 0) {
-            av_log(NULL, AV_LOG_INFO, "Got Picture\n");
-          }
+    if (pkt->stream_index == nVSI) {
+      if (avcodec_send_packet(pVCtx, pkt) >= 0) {
+        if (avcodec_receive_frame(pVCtx, pVFrame) >= 0) {
+          av_log(NULL, AV_LOG_INFO, "Got Picture\n");
         }
-      } else if (pkt->stream_index == nASI) {
-        if (avcodec_send_packet(pACtx, pkt) >= 0) {
-          if (avcodec_receive_frame(pACtx, pAFrame) >= 0) {
-            av_log(NULL, AV_LOG_INFO, "Got Sound\n");
-          }
+      }
+    } else if (pkt->stream_index == nASI) {
+      if (avcodec_send_packet(pACtx, pkt) >= 0) {
+        if (avcodec_receive_frame(pACtx, pAFrame) >= 0) {
+          av_log(NULL, AV_LOG_INFO, "Got Sound\n");
         }
       }
     }

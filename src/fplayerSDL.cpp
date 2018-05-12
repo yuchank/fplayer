@@ -8,8 +8,6 @@ extern "C" {
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_thread.h>
 
-int decode(AVCodecContext *avctx, AVFrame *frame, int *got_frame, AVPacket *pkt);
-
 int main(int argc, char *argv[])
 {
   // const char *szFilePath = "rtsp://192.168.0.9/test.mp4";
@@ -108,40 +106,38 @@ int main(int argc, char *argv[])
     if (av_read_frame(pFmtCtx, pkt) < 0) {
       continue;
     } else {
-      if (pkt) {
-        if (pkt->stream_index == nVSI) {
-          if (avcodec_send_packet(pVCtx, pkt) >= 0) {
-            if (avcodec_receive_frame(pVCtx, pVFrame) >= 0) {
-              sws_scale(sws_ctx, 
-                (uint8_t const * const *)pVFrame->data,
-                pVFrame->linesize, 
-                0, 
-                pFmtCtx->streams[nVSI]->codecpar->height,
-                pict->data,
-                pict->linesize);
-              SDL_UpdateYUVTexture(texture, 
-                &r, 
-                pict->data[0], 
-                pict->linesize[0],
-                pict->data[1], 
-                pict->linesize[1], 
-                pict->data[2], 
-                pict->linesize[2]);
-              SDL_RenderClear(renderer);
-              SDL_RenderCopy(renderer, texture, NULL, NULL);
-              SDL_RenderPresent(renderer);
-            }
+      if (pkt->stream_index == nVSI) {
+        if (avcodec_send_packet(pVCtx, pkt) >= 0) {
+          if (avcodec_receive_frame(pVCtx, pVFrame) >= 0) {
+            sws_scale(sws_ctx, 
+              (uint8_t const * const *)pVFrame->data,
+              pVFrame->linesize, 
+              0, 
+              pFmtCtx->streams[nVSI]->codecpar->height,
+              pict->data,
+              pict->linesize);
+            SDL_UpdateYUVTexture(texture, 
+              &r, 
+              pict->data[0], 
+              pict->linesize[0],
+              pict->data[1], 
+              pict->linesize[1], 
+              pict->data[2], 
+              pict->linesize[2]);
+            SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, texture, NULL, NULL);
+            SDL_RenderPresent(renderer);
           }
-        } else if (pkt->stream_index == nASI) {
-          if (avcodec_send_packet(pACtx, pkt) >= 0) {
-            if (avcodec_receive_frame(pACtx, pAFrame) >= 0) {
-              av_log(NULL, AV_LOG_INFO, "Got Sound\n");
-            }
+        }
+      } else if (pkt->stream_index == nASI) {
+        if (avcodec_send_packet(pACtx, pkt) >= 0) {
+          if (avcodec_receive_frame(pACtx, pAFrame) >= 0) {
+            av_log(NULL, AV_LOG_INFO, "Got Sound\n");
           }
         }
       }
+      av_packet_unref(pkt);
     }
-    av_packet_unref(pkt);
   }
   
   SDL_DestroyRenderer(renderer);
