@@ -2,7 +2,8 @@ extern "C" {
   #include <libavformat/avformat.h>
   #include <libavcodec/avcodec.h>
   #include <libswscale/swscale.h>
-  #include <libavutil/imgutils.h>
+  #include <libavutil/avstring.h>
+  #include <libavutil/imgutils.h>  
   #include <libswresample/swresample.h>
   #include <libavdevice/avdevice.h>
 }
@@ -14,6 +15,10 @@ extern "C" {
 
 #define SDL_AUDIO_BUFFER_SIZE 1024
 #define MAX_AUDIO_FRAME_SIZE  19200
+#define VIDEO_PICTURE_QUEUE_SIZE 1
+
+#define FF_REFRESH_EVENT (SDL_USEREVENT)
+#define FF_QUIT_EVENT (SDL_USEREVENT + 1)
 
 typedef struct _PacketQueue {
   AVPacketList *first_pkt, *last_pkt;
@@ -22,6 +27,43 @@ typedef struct _PacketQueue {
   SDL_mutex *mutex; // SDL is running the process as a separate thread.
   SDL_cond *cond;
 } PacketQueue;
+
+typedef struct _VideoPicture {
+
+} VideoPicture;
+
+typedef struct _VideoState {
+  AVFormatContext *pFmtCtx;
+  int videoStream, audioStream;
+  
+  AVStream *audio_st;
+  AVCodecContext *pACtx;
+  PacketQueue audioq;
+  uint8_t audio_buf[(MAX_AUDIO_FRAME_SIZE * 3 / 2)];  // 28,800
+  unsigned int audio_buf_size;
+  unsigned int audio_buf_index;
+  AVFrame audio_frame;
+  AVPacket audio_pkt;
+  uint8_t *audio_pkt_data;
+  int audio_pkt_size;
+
+  AVStream *video_st;
+  AVCodecContext *pVCtx;
+  PacketQueue videoq;
+  struct SwsContext *sws_ctx;
+  VideoPicture pictq[VIDEO_PICTURE_QUEUE_SIZE];
+  int pictq_size, pictq_rindex, pictq_windex;
+  SDL_mutex *pictq_mutex;
+  SDL_cond *pictq_cond;
+
+  SDL_Thread *parse_tid;
+  SDL_Thread *video_tid;
+
+  char filename[1024];
+  int quit;
+} VideoState;
+
+VideoState *global_video_state;
 
 int quit = 0;
 
@@ -180,12 +222,153 @@ void audio_callback(void *userdata, Uint8 *stream, int len) {
   }
 }
 
+static Uint32 sdl_refresh_timer_cb(Uint32 interval, void *opaque) {
+  SDL_Event event;
+  event.type = FF_REFRESH_EVENT;
+  event.user.data1 = opaque;
+  SDL_PushEvent(&event);
+  return 0; /* 0 means stop timer */
+}
+
+/* schedule a video refresh in 'delay' ms */
+static void schedule_refresh(VideoState *is, int delay) {
+  SDL_AddTimer(delay, sdl_refresh_timer_cb, is);
+}
+
+int video_thread(void *arg) {
+  VideoState *is = static_cast<VideoState *>(arg);
+
+  while (1) {
+    if (is->quit) {
+      break;
+    }
+  }
+}
+
+int stream_component_open(VideoState *is, int stream_index) {
+  AVFormatContext *pFmtCtx = is->pFmtCtx;
+  SDL_AudioSpec wanted_spec, spec;
+
+  // find decoder
+  AVCodec *codec = avcodec_find_decoder(pFmtCtx->streams[stream_index]->codecpar->codec_id);
+  
+  // default initialization
+  AVCodecContext *codecCtx = avcodec_alloc_context3(codec);
+
+  // Fill the codec context based on the values from the supplied codec parameters
+  avcodec_parameters_to_context(codecCtx, pFmtCtx->streams[stream_index]->codecpar);
+
+  if (codecCtx->codec_type == AVMEDIA_TYPE_AUDIO) {
+    wanted_spec.freq = codecCtx->sample_rate;
+    wanted_spec.format = AUDIO_S16SYS;    // Signed 16bit endian:SYS
+    wanted_spec.channels = codecCtx->channels;
+    wanted_spec.silence = 0;
+    wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;
+    wanted_spec.callback = audio_callback;
+    wanted_spec.userdata = is;
+
+    // open the audio device
+    SDL_OpenAudio(&wanted_spec, &spec);
+
+    swrCtx = swr_alloc();
+    av_opt_set_channel_layout(swrCtx, "in_channel_layout", codecCtx->channel_layout, 0);
+    av_opt_set_channel_layout(swrCtx, "out_channel_layout", codecCtx->channel_layout, 0);
+    av_opt_set_int(swrCtx, "in_sample_rate", codecCtx->sample_rate, 0);
+    av_opt_set_int(swrCtx, "out_sample_rate", codecCtx->sample_rate, 0);
+    av_opt_set_sample_fmt(swrCtx, "in_sample_fmt", codecCtx->sample_fmt, 0);
+    av_opt_set_sample_fmt(swrCtx, "out_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
+    swr_init(swrCtx);
+  }
+
+  // initialize codec context as decoder
+  avcodec_open2(codecCtx, codec, NULL);
+
+  switch(codecCtx->codec_type) {
+    case AVMEDIA_TYPE_AUDIO:
+      is->audioStream = stream_index;
+      is->audio_st = pFmtCtx->streams[stream_index];
+      is->pACtx = codecCtx;
+      is->audio_buf_size = 0;
+      is->audio_buf_index = 0;
+      memset(&is->audio_pkt, 0, sizeof(is->audio_pkt));
+      packet_queue_init(&is->audioq);
+      // starts the audio device. it plays silence if it doesn't get data.
+      SDL_PauseAudio(0);
+      break;
+
+    case AVMEDIA_TYPE_VIDEO:
+      is->videoStream = stream_index;
+      is->video_st = pFmtCtx->streams[stream_index];
+      is->pVCtx = codecCtx;
+      packet_queue_init(&is->videoq);
+      is->video_tid = SDL_CreateThread(video_thread, "video", is);
+      is->sws_ctx = sws_getContext(
+                      is->video_st->codec->width,
+                      is->video_st->codec->height,
+                      is->video_st->codec->pix_fmt,
+                      is->video_st->codec->width,
+                      is->video_st->codec->height,
+                      AV_PIX_FMT_YUV420P,
+                      SWS_BILINEAR,
+                      NULL,
+                      NULL,
+                      NULL);
+      break;
+
+    default:
+      break;
+  }
+}
+
+int decode_thread(void *arg) {
+  VideoState *is = static_cast<VideoState *>(arg);
+  AVFormatContext *pFmtCtx = NULL;
+  AVPacket pkt1, *packet = &pkt1;
+  
+  int video_index = -1;
+  int audio_index = -1;
+
+  is->videoStream = video_index;
+  is->audioStream = audio_index;
+
+  global_video_state = is;
+
+  // open an input stream and read the header.
+  avformat_open_input(&pFmtCtx, is->filename, NULL, NULL);
+  is->pFmtCtx = pFmtCtx;
+
+  // read packtes of a media file to get stream information.
+  avformat_find_stream_info(pFmtCtx, NULL);
+
+  // dump information about file onto standard error
+  av_dump_format(pFmtCtx, 0, is->filename, 0);
+  
+  // find video stream
+  int video_index = av_find_best_stream(pFmtCtx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
+  int audio_index = av_find_best_stream(pFmtCtx, AVMEDIA_TYPE_AUDIO, -1, video_index, NULL, 0);
+
+  stream_component_open(is, audio_index);
+  stream_component_open(is, video_index);
+
+  return 0;
+}
+
 int main(int argc, char *argv[])
 {
-  // const char *szFilePath = "rtsp://192.168.0.9/test.mp4";
-  const char *szFilePath = "hist.mp4";
+  SDL_Event event;
+  VideoState *is = static_cast<VideoState *>(av_mallocz(sizeof(VideoState)));
 
-  AVFormatContext *pFmtCtx = NULL;
+  av_strlcpy(is->filename, "hist.mp4", sizeof(is->filename));
+  is->pictq_mutex = SDL_CreateMutex();
+  is->pictq_cond = SDL_CreateCond();
+
+  schedule_refresh(is, 40);
+  is->parse_tid = SDL_CreateThread(decode_thread, "decoder", is);
+  if (!is->parse_tid) {
+    av_free(is);
+    return EXIT_FAILURE;
+  }
+
 
   SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER);
 
@@ -195,56 +378,8 @@ int main(int argc, char *argv[])
   // do global initialization of network components.
   // avformat_network_init();
 
-  // open an input stream and read the header.
-  avformat_open_input(&pFmtCtx, szFilePath, NULL, NULL);
 
-  // read packtes of a media file to get stream information.
-  avformat_find_stream_info(pFmtCtx, NULL);
-  
-  // find video stream
-  int nVSI = av_find_best_stream(pFmtCtx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
-  int nASI = av_find_best_stream(pFmtCtx, AVMEDIA_TYPE_AUDIO, -1, nVSI, NULL, 0);
-  
-  // find decoder
-  AVCodec *pVideoCodec = avcodec_find_decoder(pFmtCtx->streams[nVSI]->codecpar->codec_id);
-  AVCodec *pAudioCodec = avcodec_find_decoder(pFmtCtx->streams[nASI]->codecpar->codec_id);
-  
-  // default initialization
-  AVCodecContext *pVCtx = avcodec_alloc_context3(pVideoCodec);
-  AVCodecContext *pACtx = avcodec_alloc_context3(pAudioCodec);
 
-  // Fill the codec context based on the values from the supplied codec parameters
-  avcodec_parameters_to_context(pVCtx, pFmtCtx->streams[nVSI]->codecpar);
-  avcodec_parameters_to_context(pACtx, pFmtCtx->streams[nASI]->codecpar);
-
-  // initialize codec context as decoder
-  avcodec_open2(pVCtx, pVideoCodec, NULL);
-  avcodec_open2(pACtx, pAudioCodec, NULL);
-
-  swrCtx = swr_alloc();
-	av_opt_set_channel_layout(swrCtx, "in_channel_layout", pACtx->channel_layout, 0);
-	av_opt_set_channel_layout(swrCtx, "out_channel_layout", pACtx->channel_layout, 0);
-	av_opt_set_int(swrCtx, "in_sample_rate", pACtx->sample_rate, 0);
-	av_opt_set_int(swrCtx, "out_sample_rate", pACtx->sample_rate, 0);
-	av_opt_set_sample_fmt(swrCtx, "in_sample_fmt", pACtx->sample_fmt, 0);
-	av_opt_set_sample_fmt(swrCtx, "out_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
-	swr_init(swrCtx);
-
-  packet_queue_init(&audioq);
-
-  SDL_AudioSpec wanted_spec, spec;
-  wanted_spec.freq = pACtx->sample_rate;
-  wanted_spec.format = AUDIO_S16SYS;    // Signed 16bit endian:SYS
-  wanted_spec.channels = pACtx->channels;
-  wanted_spec.silence = 0;
-  wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;
-  wanted_spec.callback = audio_callback;
-  wanted_spec.userdata = pACtx;
-
-  // open the audio device
-  SDL_OpenAudio(&wanted_spec, &spec);
-  // starts the audio device. it plays silence if it doesn't get data.
-  SDL_PauseAudio(0);
   
   SDL_Window *window = SDL_CreateWindow("SDL_CreateTexture", 
                           SDL_WINDOWPOS_UNDEFINED, 
@@ -264,16 +399,6 @@ int main(int argc, char *argv[])
                             pFmtCtx->streams[nVSI]->codecpar->width, 
                             pFmtCtx->streams[nVSI]->codecpar->height);
   
-  struct SwsContext *sws_ctx = sws_getContext(pFmtCtx->streams[nVSI]->codecpar->width, 
-                                  pFmtCtx->streams[nVSI]->codecpar->height,
-                                  pVCtx->pix_fmt,
-                                  pFmtCtx->streams[nVSI]->codecpar->width, 
-                                  pFmtCtx->streams[nVSI]->codecpar->height,
-                                  AV_PIX_FMT_YUV420P,
-                                  SWS_BILINEAR,
-                                  NULL,
-                                  NULL,
-                                  NULL);
 
   AVPacket *pkt = av_packet_alloc();
   av_init_packet(pkt);
@@ -294,7 +419,6 @@ int main(int argc, char *argv[])
       pFmtCtx->streams[nVSI]->codecpar->height, 
       1);
 
-  SDL_Event event;
   while (1) {
     SDL_PollEvent(&event);
     if (event.type == SDL_QUIT) {
