@@ -351,9 +351,6 @@ int main(int argc, char *argv[])
 
   av_packet_free(&pkt);
 
-  avcodec_close(pVCtx);
-  avcodec_close(pACtx);
-
   avcodec_free_context(&pVCtx);
   avcodec_free_context(&pACtx);
   
