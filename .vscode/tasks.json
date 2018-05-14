@@ -16,6 +16,7 @@
       "args": [
         "${file}",
         "-g",
+        "-D__STDC_CONSTANT_MACROS",
         "-I${workspaceRoot}\\include",
         "-L${workspaceRoot}\\lib",
         "-lavformat",

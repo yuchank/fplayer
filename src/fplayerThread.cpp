@@ -12,6 +12,9 @@ extern "C" {
 
 #define SDL_AUDIO_BUFFER_SIZE 1024
 
+#define FF_REFRESH_EVENT (SDL_USEREVENT)
+#define FF_QUIT_EVENT (SDL_USEREVENT + 1)
+
 typedef struct _PacketQueue {
   
 } PacketQueue;
@@ -53,6 +56,10 @@ int packet_queue_init(PacketQueue *q) {
 }
 
 void audio_callback(void *userdata, Uint8 *stream, int len) {
+
+}
+
+void video_refresh_timer(void *userdata) {
 
 }
 
@@ -144,7 +151,7 @@ int decode_thread(void *arg) {
 
 int main(int argc, char *argv[])
 {
-  const char *szFilePath = "land.mkv";
+  const char *szFilePath = "hist.mp4";
 
   VideoState *is = static_cast<VideoState *>(av_mallocz(sizeof(VideoState)));
   SDL_Event event;
@@ -153,7 +160,7 @@ int main(int argc, char *argv[])
 
   av_strlcpy(is->filename, szFilePath, sizeof(is->filename));
 
-  SDL_Window *window = 	window = SDL_CreateWindow(szFilePath, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_RESIZABLE);
+  SDL_Window *window = SDL_CreateWindow(szFilePath, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_RESIZABLE);
 
   is->parse_tid = SDL_CreateThread(decode_thread, "decode_thread", is);
 
@@ -163,6 +170,9 @@ int main(int argc, char *argv[])
       case SDL_QUIT:
         SDL_Quit();
         goto cleanup;
+      case FF_REFRESH_EVENT:
+        video_refresh_timer(event.user.data1);
+        break;
       default:
         break;
     }
