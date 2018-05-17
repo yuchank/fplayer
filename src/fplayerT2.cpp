@@ -1,5 +1,3 @@
-#define __STDC_CONSTANT_MACROS
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -697,7 +695,7 @@ int main(int argc, char *argv[])
 {
 	int rv = 0, audioStream = -1, videoStream = -1;
 	unsigned int s;
-	char* filename = "file:little.mkv";
+	char* filename = "file:hist.mp4";
 	char err[1024];
 	SDL_Event evt;
 	VideoState * is = NULL;
